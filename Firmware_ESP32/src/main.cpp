@@ -390,10 +390,11 @@ int leerSensorRS485() {
 //   AT+CMQTTSTOP     → Detener el servicio MQTT
 // ══════════════════════════════════════════════════════════════
 void publicarMQTT(int nivel) {
-    // Construir JSON: {"nombre":"Tanque Principal","nivel":1616}
-    char payload[80];
+    // Construir JSON: {"nombre":"Tanque Principal","valor":1616,"bomba":true,"modo":"automatico"}
+    char payload[100];
     snprintf(payload, sizeof(payload),
-             "{\"nombre\":\"Tanque Principal\",\"nivel\":%d}", nivel);
+             "{\"nombre\":\"Tanque Principal\",\"valor\":%d,\"bomba\":%s,\"modo\":\"%s\"}", 
+             nivel, estadoBomba ? "true" : "false", esModoAutomatico ? "automatico" : "manual");
     int payloadLen = strlen(payload);
 
     Serial.printf("[MQTT] Topic: %s\n", MQTT_TOPIC);

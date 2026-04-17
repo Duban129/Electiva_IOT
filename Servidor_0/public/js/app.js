@@ -501,12 +501,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (dataDisp.dispositivos && dataDisp.dispositivos.length > 0) {
                 const dispositivo = dataDisp.dispositivos[0]; 
                 
-                if (typeof dispositivo.valor === 'number') {
-                    nivelActual = dispositivo.valor;
-                } else if (dispositivo.valor && typeof dispositivo.valor.valor === 'number') {
+                if (dispositivo.valor && typeof dispositivo.valor.valor === 'number') {
                     nivelActual = dispositivo.valor.valor;
                     if (dispositivo.valor.bomba !== undefined) bombaActiva = dispositivo.valor.bomba;
-                    // También podríamos leer "modo" si el ESP lo reportara de vuelta
+                    
+                    if (dispositivo.valor.modo !== undefined) {
+                        const m = dispositivo.valor.modo === 'automatico' ? 'auto' : 'manual';
+                        if (currentOperationMode !== m) {
+                            currentOperationMode = m;
+                            actualizarBotonesDeBombaSegunModo();
+                        }
+                    }
+                } else if (typeof dispositivo.valor === 'number') {
+                    nivelActual = dispositivo.valor;
                 }
 
             }
