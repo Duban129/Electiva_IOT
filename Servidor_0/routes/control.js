@@ -1,5 +1,5 @@
 const { Router } = require('express');
-const { cambiarModo, controlarBomba, configurarLimites } = require('../controllers/control');
+const { cambiarModo, controlarBomba, configurarLimites, solicitarScanWifi, configurarWifi } = require('../controllers/control');
 const { validarJWT } = require('../middlewares/validar-jwt');
 
 const router = Router();
@@ -15,5 +15,11 @@ router.post('/bomba', controlarBomba );
 
 // Endpoint para parametrizar el llenado (setpoints)
 router.post('/limites', configurarLimites );
+
+// Endpoint para escanear wifi
+router.post('/wifi-scan', solicitarScanWifi );
+
+// Endpoint para configurar wifi de respaldo
+router.post('/wifi-config', configurarWifi );
 
 module.exports = router;

@@ -20,6 +20,13 @@ const DispositivoSchema = Schema({
     topic: {
         type: String,
         default: ''
+    },
+    redesWiFi: [{
+        type: String
+    }],
+    wifiConfig: {
+        ssid: { type: String, default: '' },
+        enabled: { type: Boolean, default: false }
     }
 });
 

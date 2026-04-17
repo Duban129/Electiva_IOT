@@ -108,8 +108,63 @@ const configurarLimites = async (req = request, res = response) => {
     }
 }
 
+const solicitarScanWifi = async (req = request, res = response) => {
+    try {
+        const mqttClient = req.app.get('mqttClient');
+        const exito = mqttClient.publicarComando('tanques/control', { comando: 'scan_wifi' });
+
+        if (exito) {
+            const userId = req.usuario.id;
+            registrarEventoInterno('Escaneo de redes Wi-Fi solicitado al dispositivo', 'INFO', userId);
+            res.json({ msg: 'Comando de escaneo Wi-Fi enviado a la placa' });
+        } else {
+            res.status(500).json({ msg: 'Error de red MQTT' });
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ msg: 'Error interno Servidor' });
+    }
+}
+
+const configurarWifi = async (req = request, res = response) => {
+    const { password, ssid, wifi_password, enabled } = req.body;
+    const userId = req.usuario.id;
+
+    if (!password || !ssid || enabled === undefined) {
+        return res.status(400).json({ msg: 'Faltan parámetros de configuración Wi-Fi' });
+    }
+
+    try {
+        const usuario = await Usuario.findById(userId);
+        const validPassword = bcryptjs.compareSync(password, usuario.password);
+        if (!validPassword) {
+            registrarEventoInterno(`Intento fallido de configurar Wi-Fi (Clave incorrecta)`, 'WARNING', userId);
+            return res.status(401).json({ msg: 'Contraseña incorrecta' });
+        }
+
+        const mqttClient = req.app.get('mqttClient');
+        const exito = mqttClient.publicarComando('tanques/control', { 
+            wifi_ssid: ssid,
+            wifi_password: wifi_password || '',
+            wifi_enabled: enabled
+        });
+
+        if (exito) {
+            registrarEventoInterno(`Respaldo Wi-Fi configurado para red: ${ssid}`, 'SUCCESS', userId);
+            res.json({ msg: 'Configuración Wi-Fi enviada con éxito a la ESP32' });
+        } else {
+            res.status(500).json({ msg: 'Error de red MQTT' });
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ msg: 'Error interno Servidor' });
+    }
+}
+
 module.exports = {
     cambiarModo,
     controlarBomba,
-    configurarLimites
+    configurarLimites,
+    solicitarScanWifi,
+    configurarWifi
 }

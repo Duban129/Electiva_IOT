@@ -39,6 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnPumpOff = document.getElementById('btn-pump-off');
     const overflowWarning = document.getElementById('overflow-warning');
 
+    const btnConfigWifi = document.getElementById('btn-config-wifi');
+
     let levelChart = null;
     let pollInterval = null;
     let clockInterval = null;
@@ -322,6 +324,70 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- CONFIGURACIÓN WI-FI RESPALDO ---
+    btnConfigWifi.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const { value: formValues } = await Swal.fire({
+            title: 'Configurar Wi-Fi de Respaldo',
+            html: `
+                <div style="margin-bottom: 15px; text-align: left;">
+                    <label style="color: #fff; font-size: 14px;">¿Activar conexión Wi-Fi de emergencia?</label>
+                    <select id="swal-wifi-enabled" class="swal2-input">
+                        <option value="false">NO (Uso exclusivo Celular SIM)</option>
+                        <option value="true">SÍ (Usar Wi-Fi si está disponible)</option>
+                    </select>
+                </div>
+                <input id="swal-wifi-ssid" class="swal2-input" placeholder="Nombre de la red Wi-Fi (SSID)" type="text">
+                <input id="swal-wifi-pwd" class="swal2-input" placeholder="Contraseña de la red (Dejar vacío si no tiene)" type="password">
+                <input id="swal-wifi-admin" class="swal2-input" placeholder="Clave Administrador (Autorización)" type="password">
+            `,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'Configurar Firmware',
+            background: document.body.classList.contains('light-mode') ? '#fff' : '#1e293b',
+            color: document.body.classList.contains('light-mode') ? '#000' : '#fff',
+            preConfirm: () => {
+                return [
+                    document.getElementById('swal-wifi-enabled').value,
+                    document.getElementById('swal-wifi-ssid').value,
+                    document.getElementById('swal-wifi-pwd').value,
+                    document.getElementById('swal-wifi-admin').value
+                ]
+            }
+        });
+
+        if (formValues && formValues[3]) { // Si la password administrador fue ingresada
+            try {
+                const isEnabled = formValues[0] === 'true';
+                const ssid = formValues[1];
+                
+                if (isEnabled && !ssid) {
+                    return Swal.fire('Error', 'Debe escribir el nombre de la red Wi-Fi si desea activarlo.', 'error');
+                }
+
+                const resp = await fetch('/api/control/wifi-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-token': getToken() },
+                    body: JSON.stringify({ 
+                        enabled: isEnabled,
+                        ssid: ssid || 'NONE',
+                        wifi_password: formValues[2],
+                        password: formValues[3] 
+                    })
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    Swal.fire('¡Conectado Satisfactoriamente!', 'La orden de enlace Wi-Fi ha sido enviada al equipo.', 'success');
+                    cargarEventos(); 
+                } else {
+                    Swal.fire('Denegado', data.msg, 'error');
+                }
+            } catch (err) {
+                Swal.fire('Error', 'Fallo conectando al servidor', 'error');
+            }
+        }
+    });
+
     // Descargar CSV
     btnExportCsv.addEventListener('click', (e) => {
         e.preventDefault();
@@ -442,6 +508,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (dispositivo.valor.bomba !== undefined) bombaActiva = dispositivo.valor.bomba;
                     // También podríamos leer "modo" si el ESP lo reportara de vuelta
                 }
+
             }
 
             // Actualizar Tarjeta Principal

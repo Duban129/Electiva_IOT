@@ -35,18 +35,32 @@ class MqttClient {
 
             // Intentar parsear el mensaje como JSON por si es complejo
             let valorAGuardar = payload;
+            let esEscaneoWifi = false;
+            let redesEscaneadas = [];
             try {
                 const jsonObj = JSON.parse(payload);
-                // Si envía json {"valor": 45}, tomamos eso, sino guardamos todo el json
-                valorAGuardar = jsonObj.valor !== undefined ? jsonObj.valor : jsonObj;
+                if (jsonObj.scan_redes) {
+                    esEscaneoWifi = true;
+                    redesEscaneadas = jsonObj.scan_redes;
+                } else {
+                    // Si envía json {"valor": 45}, tomamos eso, sino guardamos todo el json
+                    valorAGuardar = jsonObj.valor !== undefined ? jsonObj.valor : jsonObj;
+                }
             } catch (error) {
                 // Si no es JSON válido, usamos el string plano
             }
 
-            // Buscar en MongoDB el dispositivo cuyo "topic" coincida con este topic
-            // o si el topic es dispositivos/ID, buscaríamos por _id.
-            // Para ser flexibles, buscamos por campo `topic` definido en DB.
             try {
+                if (esEscaneoWifi) {
+                    await Dispositivo.findOneAndUpdate(
+                        { topic: topic },
+                        { redesWiFi: redesEscaneadas },
+                        { upsert: true }
+                    );
+                    console.log(`[MQTT] Escaneo de redes Wi-Fi guardado en dispositivo [${topic}]`);
+                    return; // No guardar un registro de esto
+                }
+
                 // Preparamos los datos a actualizar/insertar
                 let datosActualizar = { valor: valorAGuardar };
                 

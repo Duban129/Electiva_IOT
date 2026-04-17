@@ -32,6 +32,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 
 
 // ─── Pines ────────────────────────────────────────────────────
@@ -58,9 +59,11 @@ const char* MQTT_TOPIC  = "tanques/nivel/01";
 const char* CLIENT_ID   = "ESP32_Tanque_01";
 const char* APN         = "internet.comcel.com.co"; // Cambia esto según tu país/operador
 
-// ─── Configuración Wi-Fi ──────────────────────────────────────
-const char* WIFI_SSID     = "CAREPIK";      // PON AQUÍ TU RED WI-FI
-const char* WIFI_PASSWORD = "1065096235";  // PON AQUÍ TU CONTRASEÑA
+// ─── Configuración Wi-Fi (NVS) ────────────────────────────────
+Preferences preferences;
+String pref_ssid = "";
+String pref_pwd = "";
+bool pref_wifi_enabled = false;
 
 WiFiClient espClient;
 PubSubClient mqttWiFiClient(espClient);
@@ -126,8 +129,17 @@ void setup() {
     digitalWrite(PIN_BOMBA, LOW); // Bomba apagada inicialmente
     Serial.println("[BOMBA] Pin del Relé configurado");
 
-    // ── 3. Inicializar Wi-Fi ───────────────────────────────────
-    setupWiFi();
+    // ── 3. Inicializar NVS y leer config Wi-Fi ─────────────────
+    preferences.begin("wifi-cfg", false);
+    pref_ssid = preferences.getString("ssid", "");
+    pref_pwd = preferences.getString("pwd", "");
+    pref_wifi_enabled = preferences.getBool("enabled", false);
+    
+    if (pref_wifi_enabled && pref_ssid != "") {
+        setupWiFi();
+    } else {
+        Serial.println("[WIFI] Respaldo Wi-Fi desactivado o no configurado.");
+    }
 
     // ── 4. Encender y probar el A7672S (DESHABILITADO TEMPORALMENTE) ───
     // encenderModem();
@@ -172,8 +184,8 @@ void loop() {
             }
         }
 
-        // PASO 2: Verificar conexión y publicar por MQTT (Prioridad Wi-Fi)
-        if (WiFi.status() == WL_CONNECTED) {
+        // PASO 2: Verificar conexión y publicar por MQTT (Prioridad Wi-Fi si está activo)
+        if (pref_wifi_enabled && WiFi.status() == WL_CONNECTED) {
             if (!mqttWiFiClient.connected()) {
                 reconnectMQTTWiFi();
             }
@@ -185,7 +197,9 @@ void loop() {
                 goto usar_modem;
             }
         } else {
-            Serial.println("[WIFI] Desconectado. Intentando módem celular...");
+            if (pref_wifi_enabled) {
+                Serial.println("[WIFI] Desconectado. Intentando módem celular...");
+            }
 usar_modem:
             if (modemListo) {
                 if (diagnosticarModem()) {
@@ -506,9 +520,9 @@ String enviarComandoATRespuesta(const char* cmd, int timeoutMs) {
 void setupWiFi() {
     Serial.println();
     Serial.print("[WIFI] Conectando a ");
-    Serial.println(WIFI_SSID);
+    Serial.println(pref_ssid);
 
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.begin(pref_ssid.c_str(), pref_pwd.c_str());
 
     int intentos = 0;
     while (WiFi.status() != WL_CONNECTED && intentos < 20) {
@@ -628,6 +642,24 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         limiteBajo = doc["setpoint_bajo"].as<int>();
         limiteAlto = doc["setpoint_alto"].as<int>();
         Serial.printf(">>> LÍMITES RECONFIGURADOS -> Bajo: %d mm | Alto: %d mm <<<\n", limiteBajo, limiteAlto);
+    }
+
+    if (doc.containsKey("wifi_ssid")) {
+        pref_ssid = doc["wifi_ssid"].as<String>();
+        pref_pwd = doc["wifi_password"].as<String>();
+        pref_wifi_enabled = doc["wifi_enabled"].as<bool>();
+        
+        preferences.putString("ssid", pref_ssid);
+        preferences.putString("pwd", pref_pwd);
+        preferences.putBool("enabled", pref_wifi_enabled);
+        
+        Serial.printf(">>> WI-FI ACTUALIZADO Y GUARDADO EN NVS: %s | Activado: %s <<<\n", pref_ssid.c_str(), pref_wifi_enabled ? "SI" : "NO");
+        
+        // Si activó Wi-Fi enviar un mensaje para confirmar recepción
+        if (pref_wifi_enabled && pref_ssid != "NONE" && WiFi.status() != WL_CONNECTED) {
+            WiFi.begin(pref_ssid.c_str(), pref_pwd.c_str());
+            // No bloqueamos todo el proceso para esperar, dejamos que el loop maneje la reconexión de MQTT sobre Wi-Fi.
+        }
     }
 }
 
