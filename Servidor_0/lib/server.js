@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const { dbConnection } = require('../database/config');
 const MqttClient = require('./mqtt-client');
+const Usuario = require('../models/usuario');
+const bcryptjs = require('bcryptjs');
 
 /**
  * Clase que representa el servidor de la aplicación.
@@ -27,12 +29,17 @@ class Server {
 
     // Inicializar cliente MQTT
     this.mqttClient = new MqttClient();
+    this.app.set('mqttClient', this.mqttClient); // Permitir usar req.app.get('mqttClient') en los controllers
 
         /**
          * Ruta base para las APIs relacionadas con dispositivos.
          * @type {string}
          */
         this.dispositivosPath = '/api/dispositivos';
+        this.authPath = '/api/auth';
+        this.registrosPath = '/api/registros';
+        this.controlPath = '/api/control';
+        this.eventosPath = '/api/eventos';
 
         // Middlewares: Funciones que añaden funcionalidad al web server
         this.middlewares();
@@ -46,6 +53,25 @@ class Server {
      */
     async conectarDB() {
         await dbConnection();
+        await this.crearAdminPorDefecto();
+    }
+
+    async crearAdminPorDefecto() {
+        try {
+            const adminExiste = await Usuario.findOne({ username: 'admin' });
+            if (!adminExiste) {
+                const usuario = new Usuario({
+                    username: 'admin',
+                    password: '123' // Temporal, se reemplaza abajo
+                });
+                const salt = bcryptjs.genSaltSync();
+                usuario.password = bcryptjs.hashSync('admin', salt);
+                await usuario.save();
+                console.log('Usuario admin por defecto creado');
+            }
+        } catch (error) {
+            console.error('Error creando admin:', error);
+        }
     }
 
     /**
@@ -68,7 +94,11 @@ class Server {
      * Define las rutas de la aplicación vinculando los endpoints con sus archivos de rutas.
      */
     routes() {
+        this.app.use( this.authPath, require('../routes/auth'));
         this.app.use( this.dispositivosPath, require('../routes/dispositivos'));
+        this.app.use( this.registrosPath, require('../routes/registros'));
+        this.app.use( this.controlPath, require('../routes/control'));
+        this.app.use( this.eventosPath, require('../routes/eventos'));
     }
 
     /**

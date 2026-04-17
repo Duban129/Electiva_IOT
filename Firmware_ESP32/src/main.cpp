@@ -31,6 +31,8 @@
 #include <Arduino.h>   // ← OBLIGATORIO en PlatformIO
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
+
 
 // ─── Pines ────────────────────────────────────────────────────
 #define RS485_TX    7
@@ -39,6 +41,7 @@
 #define CAT_TX      17   // Conectar a RXD del A7672S
 #define CAT_RX      18   // Conectar a TXD del A7672S
 #define CAT_KEY     4    // Pin de encendido del A7672S
+#define PIN_BOMBA   12   // Pin para accionar el Relé de la Bomba
 
 // ─── Puertos Series ───────────────────────────────────────────
 // Serial1 → Sensor GL-A02 (RS485)
@@ -53,7 +56,7 @@ const char* BROKER_IP   = "test.mosquitto.org";
 const int   BROKER_PORT = 1883;
 const char* MQTT_TOPIC  = "tanques/nivel/01";
 const char* CLIENT_ID   = "ESP32_Tanque_01";
-const char* APN         = "claro.com.co"; // Cambia esto según tu país/operador
+const char* APN         = "internet.comcel.com.co"; // Cambia esto según tu país/operador
 
 // ─── Configuración Wi-Fi ──────────────────────────────────────
 const char* WIFI_SSID     = "CAREPIK";      // PON AQUÍ TU RED WI-FI
@@ -73,6 +76,12 @@ bool modemListo = false;
 unsigned long ultimaPublicacion = 0;
 const unsigned long INTERVALO_MS = 3000; // Publicar cada 3 segundos
 
+bool esModoAutomatico = false; // Arranca en modo manual por defecto
+bool estadoBomba = false; // Falso = apagada, Verdadero = encendida
+
+int limiteBajo = 500;
+int limiteAlto = 2900;
+
 // ─── Prototipos de funciones ───────────────────────────────────
 void encenderModem();
 bool inicializarModem();
@@ -88,6 +97,7 @@ void mqttRelease();
 void mqttStop();
 bool enviarComandoAT(const char* cmd, const char* respEsperada, int timeoutMs);
 String enviarComandoATRespuesta(const char* cmd, int timeoutMs);
+void mqttCallback(char* topic, byte* payload, unsigned int length);
 
 // ══════════════════════════════════════════════════════════════
 // SETUP
@@ -110,6 +120,11 @@ void setup() {
     // ── 2. Serial del módem ─────────────────────────────────
     ModemSerial.begin(115200, SERIAL_8N1, CAT_RX, CAT_TX);
     Serial.println("[MODEM] Serial inicializado");
+
+    // ── 2.1 Configuración Pin Bomba ─────────────────────────
+    pinMode(PIN_BOMBA, OUTPUT);
+    digitalWrite(PIN_BOMBA, LOW); // Bomba apagada inicialmente
+    Serial.println("[BOMBA] Pin del Relé configurado");
 
     // ── 3. Inicializar Wi-Fi ───────────────────────────────────
     setupWiFi();
@@ -143,6 +158,19 @@ void loop() {
             return;
         }
         Serial.printf("[SENSOR] Nivel leído: %d mm\n", nivelMM);
+
+        // LÓGICA AUTOMÁTICA DE CONTROL DE LA BOMBA
+        if (esModoAutomatico) {
+            if (nivelMM <= limiteBajo && !estadoBomba) {    // Si el tanque está vacío
+                digitalWrite(PIN_BOMBA, HIGH);
+                estadoBomba = true;
+                Serial.printf("[AUTO] Nivel bajo detectado (%d mm) -> Bomba ENCENDIDA\n", nivelMM);
+            } else if (nivelMM >= limiteAlto && estadoBomba) { // Si el tanque se va a desbordar
+                digitalWrite(PIN_BOMBA, LOW);
+                estadoBomba = false;
+                Serial.printf("[AUTO] Tanque lleno (%d mm) -> Bomba APAGADA\n", nivelMM);
+            }
+        }
 
         // PASO 2: Verificar conexión y publicar por MQTT (Prioridad Wi-Fi)
         if (WiFi.status() == WL_CONNECTED) {
@@ -497,6 +525,7 @@ void setupWiFi() {
         
         // Configuramos el servidor usando las mismas constantes del módem
         mqttWiFiClient.setServer(BROKER_IP, BROKER_PORT);
+        mqttWiFiClient.setCallback(mqttCallback);
     } else {
         Serial.println("");
         Serial.println("[WIFI] ✗ No se pudo conectar (timeout). Se priorizará el módem celular.");
@@ -508,6 +537,8 @@ bool reconnectMQTTWiFi() {
     // Intentamos conectar usando nuestro ID
     if (mqttWiFiClient.connect(CLIENT_ID)) {
         Serial.println(" ✓ Conectado");
+        mqttWiFiClient.subscribe("tanques/control");
+        Serial.println("[MQTT-WIFI] Suscrito a topic: tanques/control");
         return true;
     } else {
         Serial.print(" ✗ Falló, rc=");
@@ -518,9 +549,10 @@ bool reconnectMQTTWiFi() {
 }
 
 void publicarMQTTWiFi(int nivel) {
-    char payload[80];
+    char payload[100];
     snprintf(payload, sizeof(payload),
-             "{\"nombre\":\"Tanque Principal\",\"nivel\":%d}", nivel);
+             "{\"nombre\":\"Tanque Principal\",\"valor\":%d,\"bomba\":%s,\"modo\":\"%s\"}", 
+             nivel, estadoBomba ? "true" : "false", esModoAutomatico ? "automatico" : "manual");
 
     Serial.printf("[MQTT-WIFI] Topic: %s\n", MQTT_TOPIC);
     Serial.printf("[MQTT-WIFI] Payload: %s\n", payload);
@@ -531,3 +563,71 @@ void publicarMQTTWiFi(int nivel) {
         Serial.println("[MQTT-WIFI] ✗ Error al publicar el mensaje");
     }
 }
+
+// ══════════════════════════════════════════════════════════════
+// FUNCIÓN: Callback para recibir comandos MQTT
+// ══════════════════════════════════════════════════════════════
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    Serial.printf("\n[MQTT] Mensaje recibido en topic [%s]\n", topic);
+    
+    // Convertir el payload a un String
+    String msj = "";
+    for (unsigned int i = 0; i < length; i++) {
+        msj += (char)payload[i];
+    }
+    Serial.printf("[MQTT] Contenido: %s\n", msj.c_str());
+
+    // Parsear el JSON recibido usando ArduinoJson
+    StaticJsonDocument<200> doc;
+    DeserializationError error = deserializeJson(doc, msj);
+
+    if (error) {
+        Serial.printf("[MQTT] Error al parsear JSON: %s\n", error.c_str());
+        return;
+    }
+
+    // Comprobar si se envió un comando de cambio de modo
+    if (doc.containsKey("modo")) {
+        String nuevoModo = doc["modo"].as<String>();
+        if (nuevoModo == "automatico") {
+            esModoAutomatico = true;
+            Serial.println(">>> ACTIVADO MODO: AUTOMÁTICO <<<");
+        } else if (nuevoModo == "manual") {
+            esModoAutomatico = false;
+            Serial.println(">>> ACTIVADO MODO: MANUAL <<<");
+        }
+    }
+
+    // Comprobar si se envió una orden directa a la bomba (sólo funciona si en manual, o si es apagado de emergencia)
+    if (doc.containsKey("bomba")) {
+        String ordenBomba = doc["bomba"].as<String>();
+        
+        // El servidor apagará forzosamente la bomba si hay desbordamiento en manual.
+        // O si el usuario pulsó los botones manuales.
+        if (ordenBomba == "on") {
+            if (!esModoAutomatico) {
+                digitalWrite(PIN_BOMBA, HIGH);
+                estadoBomba = true;
+                Serial.println(">>> BOMBA ENCENDIDA (MANUAL) <<<");
+            } else {
+                Serial.println("[MQTT] Comando 'on' ignorado (estamos en Auto)");
+            }
+        } else if (ordenBomba == "off") {
+            digitalWrite(PIN_BOMBA, LOW);
+            estadoBomba = false;
+            if (!esModoAutomatico) {
+                Serial.println(">>> BOMBA APAGADA (MANUAL) <<<");
+            } else {
+                Serial.println(">>> BOMBA APAGADA (FORZADA/EMERGENCIA) <<<");
+            }
+        }
+    }
+
+    // Comprobar si recibimos configuración de setpoints
+    if (doc.containsKey("setpoint_bajo") && doc.containsKey("setpoint_alto")) {
+        limiteBajo = doc["setpoint_bajo"].as<int>();
+        limiteAlto = doc["setpoint_alto"].as<int>();
+        Serial.printf(">>> LÍMITES RECONFIGURADOS -> Bajo: %d mm | Alto: %d mm <<<\n", limiteBajo, limiteAlto);
+    }
+}
+

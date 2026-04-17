@@ -96,6 +96,22 @@ class MqttClient {
         });
     }
 
+    publicarComando(topic, mensajeObj) {
+        if (this.client && this.client.connected) {
+            const msjStr = JSON.stringify(mensajeObj);
+            this.client.publish(topic, msjStr, (err) => {
+                if (err) {
+                    console.error('Error publicando MQTT:', err);
+                } else {
+                    console.log(`MQTT Publicado [${topic}]: ${msjStr}`);
+                }
+            });
+            return true;
+        }
+        console.warn('MQTT Cliente desconectado. No se puede publicar.');
+        return false;
+    }
+
 }
 
 module.exports = MqttClient;

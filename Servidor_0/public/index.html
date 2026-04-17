@@ -1,13 +1,223 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Acceso denegado</title>
+    <title>Dashboard SCADA IoT</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SweetAlert2 para popups interactivos y seguridad -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-    <h1>Acceso Denegado</h1>
-    
+    <!-- Overlay y Toast Notifications -->
+    <div id="toast-container"></div>
+
+    <!-- PANTALLA DE LOGIN -->
+    <div id="login-screen" class="screen full-center active">
+        <div class="glass-panel login-box">
+            <div class="login-header">
+                <h2>Acceso SCADA</h2>
+                <p>Nivel de Seguridad Administrador</p>
+            </div>
+            <form id="login-form">
+                <div class="input-group">
+                    <label for="username">Usuario</label>
+                    <input type="text" id="username" name="username" required autocomplete="off">
+                </div>
+                <div class="input-group">
+                    <label for="password">Contraseña</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit" class="btn-primary">Autorizar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- PANTALLA PRINCIPAL (DASHBOARD) -->
+    <div id="dashboard-screen" class="screen hidden layout-admin">
+        
+        <!-- SIDEBAR (Panel Izquierdo) -->
+        <aside class="sidebar glass-panel">
+            <div class="sidebar-header">
+                <i class="fa-solid fa-water header-icon"></i>
+                <h2>IoT <span>Hydro</span></h2>
+            </div>
+            <div class="user-profile">
+                <div class="avatar"><i class="fa-solid fa-user-tie"></i></div>
+                <p>Administrador</p>
+                <div class="status-dot"></div>
+            </div>
+            <ul class="nav-menu">
+                <li class="active"><a href="#"><i class="fa-solid fa-chart-pie"></i> Monitor Principal</a></li>
+                <!-- Botón simulando sección -->
+                <li><a href="#" id="btn-toggle-theme"><i class="fa-solid fa-moon" id="theme-icon"></i> Tema Claro/Oscuro</a></li>
+                <li><a href="#" id="btn-config-limits"><i class="fa-solid fa-sliders"></i> Ajustar Límites Bomba</a></li>
+                <li><a href="#" id="btn-show-password-modal"><i class="fa-solid fa-key"></i> Cambiar Clave</a></li>
+                <li><a href="#" id="btn-logout" class="text-danger"><i class="fa-solid fa-power-off"></i> Cerrar Sesión</a></li>
+            </ul>
+        </aside>
+
+        <!-- CONTENIDO PRINCIPAL -->
+        <main class="main-content">
+            <header class="topbar glass-panel">
+                <div class="title-head">
+                    <h1>Tablero de Estación Base</h1>
+                    <p id="datetime-display">Cargando fecha...</p>
+                </div>
+                
+                <!-- Botón modo móvil para sidebar -->
+                <button class="mobile-menu-btn" style="display:none;"><i class="fa-solid fa-bars"></i></button>
+
+                <div class="mode-badge-container">
+                    <button id="btn-export-csv" class="btn-export mr-15"><i class="fa-solid fa-file-csv"></i> Reporte Historico</button>
+                    <div class="current-mode-badge default" id="mode-badge">Iniciando...</div>
+                </div>
+            </header>
+
+            <div class="dashboard-grid">
+                
+                <!-- COLUMNA 1: GRÁFICAS Y DATOS -->
+                <div class="data-column">
+                    <!-- TARJETA: NIVEL ACTUAL -->
+                    <section class="card glass-panel text-center pulse-border">
+                        <h3>Sensor Nivel Ultrasónico</h3>
+                        <div class="value-display">
+                            <span id="current-level">--</span>
+                            <small>mm</small>
+                        </div>
+                        <div class="pump-status" id="pump-status">
+                            <div class="status-indicator offline"></div>
+                            <span>Lectura de Bomba: OFF</span>
+                        </div>
+                        <div class="volume-display mt-20">
+                            <h4>Volumen Estimado (<span id="percentage-val">0</span>%)</h4>
+                            <div class="progress-bar"><div class="progress-fill" id="volume-progress"></div></div>
+                            <h2 id="volume-liters">-- L</h2>
+                        </div>
+                    </section>
+
+                    <!-- TARJETA: GRÁFICO HISTÓRICO -->
+                    <section class="card glass-panel chart-card mt-20">
+                        <h3>Comportamiento Histórico</h3>
+                        <div class="chart-container">
+                            <canvas id="levelChart"></canvas>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- COLUMNA 2: TANQUE Y CONTROL ACTIVO -->
+                <div class="control-column">
+                    <!-- ANIMACIÓN DEL TANQUE -->
+                    <section class="card glass-panel tank-card relative-card">
+                        <!-- Warning Sign Hidden by default -->
+                        <div id="overflow-warning" class="warning-overlay hidden">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <p>¡PELIGRO DESBORDAMIENTO!</p>
+                        </div>
+
+                        <h3>Visualización en Vivo</h3>
+                        <div class="tank-container">
+                            <!-- Gráfico de la Bomba -->
+                            <div class="pump-graphic" id="pump-graphic">
+                                <i class="fa-solid fa-gear pump-wheel"></i>
+                                <div class="pipeline">
+                                    <div class="water-drop hidden" id="water-drop"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="tank">
+                                <div class="water" id="tank-water">
+                                    <div class="wave"></div>
+                                    <div class="wave wave2"></div>
+                                </div>
+                            </div>
+                            <div class="tank-scale">
+                                <span>3000 mm</span>
+                                <span>1500 mm</span>
+                                <span>0 mm</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- PANEL DE CONTROL SCADA -->
+                    <section class="card glass-panel control-card mt-20">
+                        <h3><i class="fa-solid fa-sliders"></i> Panel de Control SCADA</h3>
+                        
+                        <div class="control-group">
+                            <span>Modo de Operación</span>
+                            <div class="mode-switch">
+                                <button id="btn-mode-auto" class="mode-btn btn-auto">Automático</button>
+                                <button id="btn-mode-manual" class="mode-btn btn-manual active">Manual</button>
+                            </div>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <div class="control-group pump-control-area">
+                            <span>Bomba (Control Manual)</span>
+                            <div class="pump-buttons">
+                                <button id="btn-pump-on" class="btn-pump on"><i class="fa-solid fa-power-off"></i> ENCENDER</button>
+                                <button id="btn-pump-off" class="btn-pump off"><i class="fa-solid fa-stop"></i> APAGAR</button>
+                            </div>
+                            <small class="hint-text mt-10">Solo disponible en modo manual</small>
+                        </div>
+                    </section>
+                </div>
+
+            </div>
+
+            <!-- LOG DE EVENTOS -->
+            <section class="card glass-panel events-card mt-20">
+                <div class="events-header">
+                    <h3><i class="fa-solid fa-clipboard-list"></i> Historial de Eventos del Sistema</h3>
+                    <button id="btn-refresh-logs" class="btn-icon"><i class="fa-solid fa-arrows-rotate"></i></button>
+                </div>
+                <div class="table-responsive">
+                    <table class="events-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha y Hora</th>
+                                <th>Severidad</th>
+                                <th>Mensaje / Evento</th>
+                                <th>Usuario Validado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-tbody">
+                            <tr><td colspan="4" class="text-center">Cargando eventos...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- MODAL CAMBIAR CONTRASEÑA MANTENIDO PARA REFERENCIA, AUNQUE SE PUEDE USAR SWAL2 -->
+    <div id="password-modal" class="modal hidden">
+        <div class="modal-content glass-panel">
+            <span class="close-btn" id="close-modal">&times;</span>
+            <h2>Cambiar Contraseña</h2>
+            <form id="password-form">
+                <div class="input-group">
+                    <label for="current-password">Contraseña Actual</label>
+                    <input type="password" id="current-password" required>
+                </div>
+                <div class="input-group">
+                    <label for="new-password">Nueva Contraseña</label>
+                    <input type="password" id="new-password" required>
+                </div>
+                <button type="submit" class="btn-primary">Actualizar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/app.js"></script>
 </body>
 </html>

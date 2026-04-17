@@ -199,4 +199,7 @@
  /home/duban/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src/WiFiUdp.h \
  /home/duban/.platformio/packages/framework-arduinoespressif32/cores/esp32/Udp.h \
  /home/duban/.platformio/packages/framework-arduinoespressif32/cores/esp32/cbuf.h \
- .pio/libdeps/esp32-s3-devkitc-1/PubSubClient/src/PubSubClient.h
+ .pio/libdeps/esp32-s3-devkitc-1/PubSubClient/src/PubSubClient.h \
+ .pio/libdeps/esp32-s3-devkitc-1/ArduinoJson/src/ArduinoJson.h \
+ .pio/libdeps/esp32-s3-devkitc-1/ArduinoJson/src/ArduinoJson.hpp \
+ .pio/libdeps/esp32-s3-devkitc-1/ArduinoJson/src/ArduinoJson/Configuration.hpp
