@@ -42,7 +42,7 @@
 #define CAT_TX      17   // Conectar a RXD del A7672S
 #define CAT_RX      18   // Conectar a TXD del A7672S
 #define CAT_KEY     4    // Pin de encendido del A7672S
-#define PIN_BOMBA   12   // Pin para accionar el Relé de la Bomba
+#define PIN_BOMBA   14   // Pin para accionar el Relé de la Bomba
 
 // ─── Puertos Series ───────────────────────────────────────────
 // Serial1 → Sensor GL-A02 (RS485)
