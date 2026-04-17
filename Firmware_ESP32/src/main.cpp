@@ -390,11 +390,11 @@ int leerSensorRS485() {
 //   AT+CMQTTSTOP     → Detener el servicio MQTT
 // ══════════════════════════════════════════════════════════════
 void publicarMQTT(int nivel) {
-    // Construir JSON: {"nombre":"Tanque Principal","valor":1616,"bomba":true,"modo":"automatico"}
+    // Construir JSON: {"nombre":"Tanque Principal","valor":1616,"bomba":true,"modo":"auto"}
     char payload[100];
     snprintf(payload, sizeof(payload),
              "{\"nombre\":\"Tanque Principal\",\"valor\":%d,\"bomba\":%s,\"modo\":\"%s\"}", 
-             nivel, estadoBomba ? "true" : "false", esModoAutomatico ? "automatico" : "manual");
+             nivel, estadoBomba ? "true" : "false", esModoAutomatico ? "auto" : "manual");
     int payloadLen = strlen(payload);
 
     Serial.printf("[MQTT] Topic: %s\n", MQTT_TOPIC);
@@ -446,12 +446,37 @@ void publicarMQTT(int nivel) {
     delay(500);
 
     // 6. Publicar con QoS 1 (el broker confirma recepción)
-    //    AT+CMQTTPUB=<índice>,<QoS>,<timeout>,<retain>
     if (!enviarComandoAT("AT+CMQTTPUB=0,1,60,0", "+CMQTTPUB: 0,0", 10000)) {
         Serial.println("[MQTT] ✗ Fallo al publicar");
     } else {
         Serial.printf("[MQTT] ✓ DATO ENVIADO: %d mm → Servidor Linux recibirá el JSON\n", nivel);
         Serial.println("[MQTT]   Node.js procesará el mensaje y actualizará MongoDB.");
+    }
+
+    // 6.5. Suscribirse a comandos para emular funcionamiento bidireccional
+    String cmdSub = "AT+CMQTTSUB=0,15,1";
+    if (enviarComandoAT(cmdSub.c_str(), ">", 3000)) {
+        ModemSerial.print("tanques/control");
+        delay(500);
+        
+        // Esperar mensajes entrantes (retained messages o enviados justo en esta ventana)
+        Serial.println("[MQTT] Esperando comandos desde servidor web...");
+        unsigned long waitInbox = millis();
+        String inbox = "";
+        while (millis() - waitInbox < 2000) {
+            while (ModemSerial.available()) {
+                inbox += (char)ModemSerial.read();
+            }
+        }
+        
+        // Extraer último JSON recibido y emular callback
+        int pInicio = inbox.lastIndexOf('{');
+        int pFin = inbox.lastIndexOf('}');
+        if (pInicio >= 0 && pFin > pInicio) {
+            String jsonMqtt = inbox.substring(pInicio, pFin + 1);
+            Serial.printf("[MQTT CELULAR INBOX]: %s\n", jsonMqtt.c_str());
+            mqttCallback((char*)"tanques/control", (byte*)jsonMqtt.c_str(), jsonMqtt.length());
+        }
     }
 
     // 7-9. Limpiar sesión
@@ -567,7 +592,7 @@ void publicarMQTTWiFi(int nivel) {
     char payload[100];
     snprintf(payload, sizeof(payload),
              "{\"nombre\":\"Tanque Principal\",\"valor\":%d,\"bomba\":%s,\"modo\":\"%s\"}", 
-             nivel, estadoBomba ? "true" : "false", esModoAutomatico ? "automatico" : "manual");
+             nivel, estadoBomba ? "true" : "false", esModoAutomatico ? "auto" : "manual");
 
     Serial.printf("[MQTT-WIFI] Topic: %s\n", MQTT_TOPIC);
     Serial.printf("[MQTT-WIFI] Payload: %s\n", payload);
@@ -604,7 +629,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     // Comprobar si se envió un comando de cambio de modo
     if (doc.containsKey("modo")) {
         String nuevoModo = doc["modo"].as<String>();
-        if (nuevoModo == "automatico") {
+        if (nuevoModo == "auto") {
             esModoAutomatico = true;
             Serial.println(">>> ACTIVADO MODO: AUTOMÁTICO <<<");
         } else if (nuevoModo == "manual") {

@@ -46,8 +46,8 @@ class MqttClient {
                     esEscaneoWifi = true;
                     redesEscaneadas = jsonObj.scan_redes;
                 } else {
-                    // Si envía json {"valor": 45}, tomamos eso, sino guardamos todo el json
-                    valorAGuardar = jsonObj.valor !== undefined ? jsonObj.valor : jsonObj;
+                    // Guardamos todo el objeto json (que incluye valor, bomba, modo, nombre, etc)
+                    valorAGuardar = jsonObj;
                 }
             } catch (error) {
                 // Si no es JSON válido, usamos el string plano
