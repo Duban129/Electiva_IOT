@@ -29,6 +29,9 @@ class MqttClient {
         });
 
         this.client.on('message', async (topic, message) => {
+            // Ignorar los mensajes de control que nosotros mismos enviamos
+            if (topic === 'tanques/control') return;
+
             // El mensaje Buffer se convierte a string
             let payload = message.toString();
             console.log(`Mensaje recibido en topic [${topic}]: ${payload}`);

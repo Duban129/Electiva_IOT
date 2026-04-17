@@ -53,7 +53,7 @@ HardwareSerial ModemSerial(2);
 // ─── Configuración MQTT ───────────────────────────────────────
 // ⚠️  Si tu servidor Linux tiene IP pública, cámbiala aquí.
 //     Para pruebas, "test.mosquitto.org" sirve sin autenticación.
-const char* BROKER_IP   = "test.mosquitto.org";
+const char* BROKER_IP   = "5.189.151.9";
 const int   BROKER_PORT = 1883;
 const char* MQTT_TOPIC  = "tanques/nivel/01";
 const char* CLIENT_ID   = "ESP32_Tanque_01";
