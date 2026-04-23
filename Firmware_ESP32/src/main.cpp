@@ -85,6 +85,9 @@ bool estadoBomba = false; // Falso = apagada, Verdadero = encendida
 int limiteBajo = 500;
 int limiteAlto = 2900;
 
+// Preferencias para persistir modo y límites en NVS
+Preferences prefsCtrl;
+
 // ─── Prototipos de funciones ───────────────────────────────────
 void encenderModem();
 bool inicializarModem();
@@ -134,7 +137,15 @@ void setup() {
     pref_ssid = preferences.getString("ssid", "");
     pref_pwd = preferences.getString("pwd", "");
     pref_wifi_enabled = preferences.getBool("enabled", false);
-    
+
+    // ── 3.1 Leer modo y límites guardados en NVS ───────────────
+    prefsCtrl.begin("ctrl-cfg", false);
+    esModoAutomatico = prefsCtrl.getBool("auto", false);
+    limiteBajo = prefsCtrl.getInt("lim_bajo", 500);
+    limiteAlto = prefsCtrl.getInt("lim_alto", 2900);
+    Serial.printf("[NVS] Modo: %s | Bajo: %d mm | Alto: %d mm\n",
+                  esModoAutomatico ? "AUTO" : "MANUAL", limiteBajo, limiteAlto);
+
     if (pref_wifi_enabled && pref_ssid != "") {
         setupWiFi();
     } else {
@@ -158,6 +169,16 @@ void setup() {
 // LOOP PRINCIPAL
 // ══════════════════════════════════════════════════════════════
 void loop() {
+    // ✅ CORRECCIÓN: Procesar mensajes MQTT entrantes en CADA iteración
+    // del loop (no solo al publicar cada 3s). Sin esto, los comandos de
+    // modo/bomba/límites llegan al broker pero el ESP32 nunca los procesa.
+    if (pref_wifi_enabled && WiFi.status() == WL_CONNECTED) {
+        if (!mqttWiFiClient.connected()) {
+            reconnectMQTTWiFi();
+        }
+        mqttWiFiClient.loop();
+    }
+
     if (millis() - ultimaPublicacion >= INTERVALO_MS) {
         ultimaPublicacion = millis();
 
@@ -631,9 +652,11 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         String nuevoModo = doc["modo"].as<String>();
         if (nuevoModo == "auto") {
             esModoAutomatico = true;
+            prefsCtrl.putBool("auto", true); // ✅ Persistir en NVS
             Serial.println(">>> ACTIVADO MODO: AUTOMÁTICO <<<");
         } else if (nuevoModo == "manual") {
             esModoAutomatico = false;
+            prefsCtrl.putBool("auto", false); // ✅ Persistir en NVS
             Serial.println(">>> ACTIVADO MODO: MANUAL <<<");
         }
     }
@@ -667,7 +690,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (doc.containsKey("setpoint_bajo") && doc.containsKey("setpoint_alto")) {
         limiteBajo = doc["setpoint_bajo"].as<int>();
         limiteAlto = doc["setpoint_alto"].as<int>();
-        Serial.printf(">>> LÍMITES RECONFIGURADOS -> Bajo: %d mm | Alto: %d mm <<<\n", limiteBajo, limiteAlto);
+        prefsCtrl.putInt("lim_bajo", limiteBajo); // ✅ Persistir en NVS
+        prefsCtrl.putInt("lim_alto", limiteAlto); // ✅ Persistir en NVS
+        Serial.printf(">>> LÍMITES ACTUALIZADOS -> Bajo: %d mm | Alto: %d mm <<<\n", limiteBajo, limiteAlto);
     }
 
     if (doc.containsKey("wifi_ssid")) {

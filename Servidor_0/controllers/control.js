@@ -31,6 +31,16 @@ const cambiarModo = async (req = request, res = response) => {
         const exito = mqttClient.publicarComando('tanques/control', { modo: modo });
 
         if (exito) {
+            // ✅ CORRECCIÓN: Persistir el nuevo modo en MongoDB para que el
+            // polling del frontend (cada 3s) no lo revierta al valor antiguo.
+            const Dispositivo = require('../models/dispositivo');
+            const modoMongo = modo === 'auto' ? 'automatico' : 'manual';
+            await Dispositivo.findOneAndUpdate(
+                { topic: { $regex: /tanques/ } },
+                { 'valor.modo': modoMongo },
+                { new: true }
+            );
+
             registrarEventoInterno(`Modo de operación cambiado a: ${modo.toUpperCase()}`, 'WARNING', userId);
             res.json({ msg: `Modo cambiado exitosamente a ${modo}` });
         } else {

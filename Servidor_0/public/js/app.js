@@ -40,6 +40,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const overflowWarning = document.getElementById('overflow-warning');
 
     const btnConfigWifi = document.getElementById('btn-config-wifi');
+    const btnConfigUnits = document.getElementById('btn-config-units');
+    const btnSoporte = document.getElementById('btn-soporte');
+    const btnSoporteFloat = document.getElementById('btn-soporte-float');
 
     let levelChart = null;
     let pollInterval = null;
@@ -49,9 +52,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const MAX_TANK_LEVEL = 3000;
     const MAX_LITERS = 5000;
     const DANGER_LIMIT = 2950; // mm -> Si sube de esto es desbordamiento
-    let currentOperationMode = 'manual'; // por defecto asumimos manual hasta leer BD o forzarlo
+    let currentOperationMode = 'manual';
     let isInDanger = false;
     let lastKnownLevel = 0;
+    let currentUnit = localStorage.getItem('unit') || 'mm'; // Unidad activa: mm, cm, m
+
+    // --- CONVERSOR DE UNIDADES ---
+    const convertirDesdeM = (mm, unit) => {
+        if (unit === 'cm') return +(mm / 10).toFixed(1);
+        if (unit === 'm')  return +(mm / 1000).toFixed(3);
+        return Math.round(mm); // mm por defecto
+    };
+
+    const maxConvertido = (unit) => {
+        if (unit === 'cm') return MAX_TANK_LEVEL / 10;
+        if (unit === 'm')  return MAX_TANK_LEVEL / 1000;
+        return MAX_TANK_LEVEL;
+    };
 
     // --- UTILIDADES ---
     const showToast = (message, type = 'success') => {
@@ -388,6 +405,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- SOPORTE ---
+    const showSupportModal = (e) => {
+        e.preventDefault();
+        Swal.fire({
+            title: 'Soporte Técnico',
+            html: `
+                <div style="text-align: center; font-size: 16px;">
+                    <p style="font-weight: bold; margin-bottom: 15px; font-size: 18px; color: #3b82f6;">Ingeniero en Automática Industrial</p>
+                    <p style="margin-bottom: 8px;"><i class="fa-solid fa-envelope" style="color: #94a3b8;"></i> <a href="mailto:dzemanater@unicauca.edu.co" style="color: inherit; text-decoration: none;">dzemanater@unicauca.edu.co</a></p>
+                    <p><i class="fa-solid fa-envelope" style="color: #94a3b8;"></i> <a href="mailto:juanvaldez@unicauca.edu.co" style="color: inherit; text-decoration: none;">juanvaldez@unicauca.edu.co</a></p>
+                </div>
+            `,
+            icon: 'info',
+            background: document.body.classList.contains('light-mode') ? '#fff' : '#1e293b',
+            color: document.body.classList.contains('light-mode') ? '#000' : '#fff',
+            confirmButtonText: 'Cerrar'
+        });
+    };
+
+    btnSoporte?.addEventListener('click', showSupportModal);
+    btnSoporteFloat?.addEventListener('click', showSupportModal);
+
     // Descargar CSV
     btnExportCsv.addEventListener('click', (e) => {
         e.preventDefault();
@@ -518,8 +557,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             }
 
-            // Actualizar Tarjeta Principal
-            currentLevelText.innerText = Math.round(nivelActual);
+            // Actualizar Tarjeta Principal (aplicando la unidad activa)
+            lastKnownLevel = nivelActual; // guardar en mm siempre
+            currentLevelText.innerText = convertirDesdeM(nivelActual, currentUnit);
             
             // Lógica de Desbordamiento Local
             procesarPeligro(nivelActual);
@@ -566,12 +606,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     let val = 0;
                     if (typeof reg.valor === 'number') val = reg.valor;
                     else if (reg.valor && reg.valor.valor) val = reg.valor.valor;
-                    datosNivel.push(val);
+                    datosNivel.push(convertirDesdeM(val, currentUnit)); // convertir a unidad activa
                 });
 
                 if (levelChart) {
                     levelChart.data.labels = etiquetas;
                     levelChart.data.datasets[0].data = datosNivel;
+                    levelChart.data.datasets[0].label = `Nivel del Tanque (${currentUnit})`;
+                    levelChart.options.scales.y.max = maxConvertido(currentUnit);
                     levelChart.update();
                 }
             }
@@ -585,9 +627,10 @@ document.addEventListener('DOMContentLoaded', () => {
         clockInterval = setInterval(updateClock, 60000);
         actualizarBotonesDeBombaSegunModo();
         cargarEventos();
+        aplicarUnidades(); // Aplicar unidad guardada al arrancar
 
         if (!levelChart) initChart();
-        updateDashboardData(); 
+        updateDashboardData();
         pollInterval = setInterval(updateDashboardData, 3000);
     };
 
@@ -595,6 +638,86 @@ document.addEventListener('DOMContentLoaded', () => {
         if (pollInterval) clearInterval(pollInterval);
         if (clockInterval) clearInterval(clockInterval);
     };
+
+    // --- CONFIGURAR UNIDADES (desde el sidebar) ---
+
+    // Aplica la unidad activa a todos los elementos del dashboard
+    const aplicarUnidades = () => {
+        const unitLabel  = document.getElementById('unit-label');
+        const chartLabel = document.getElementById('chart-unit-label');
+        const scaleTop   = document.getElementById('scale-top');
+        const scaleMid   = document.getElementById('scale-mid');
+        const scaleBot   = document.getElementById('scale-bot');
+
+        if (unitLabel)  unitLabel.innerText  = currentUnit;
+        if (chartLabel) chartLabel.innerText = currentUnit;
+
+        // Escala del tanque (MAX_TANK_LEVEL = 3000 mm)
+        if (scaleTop) scaleTop.innerText = `${convertirDesdeM(3000, currentUnit)} ${currentUnit}`;
+        if (scaleMid) scaleMid.innerText = `${convertirDesdeM(1500, currentUnit)} ${currentUnit}`;
+        if (scaleBot) scaleBot.innerText = `0 ${currentUnit}`;
+
+        // Valor actual del sensor
+        if (lastKnownLevel !== undefined) {
+            currentLevelText.innerText = convertirDesdeM(lastKnownLevel, currentUnit);
+        }
+    };
+
+    btnConfigUnits?.addEventListener('click', async (e) => {
+        e.preventDefault();
+
+        const opcionActual = currentUnit;
+        const { value: unitElegida } = await Swal.fire({
+            title: 'Configurar Unidades',
+            html: `
+                <p style="color: var(--text-muted); margin-bottom: 20px; font-size: 14px;">Selecciona la unidad de medida para todos los valores de nivel</p>
+                <div style="display: flex; gap: 12px; justify-content: center;">
+                    <button id="opt-mm" onclick="document.getElementById('unit-choice').value='mm'" 
+                        style="padding: 14px 24px; border-radius: 12px; border: 2px solid ${
+                            opcionActual === 'mm' ? '#3b82f6' : 'rgba(255,255,255,0.15)'
+                        }; background: ${
+                            opcionActual === 'mm' ? 'rgba(59,130,246,0.2)' : 'transparent'
+                        }; color: white; font-size: 20px; font-weight: 800; cursor: pointer; font-family: Outfit; transition: all 0.2s;"
+                        onmouseover="this.style.borderColor='#3b82f6'" onmouseout="if(document.getElementById('unit-choice').value!=='mm')this.style.borderColor='rgba(255,255,255,0.15)'">
+                        mm
+                    </button>
+                    <button id="opt-cm" onclick="document.getElementById('unit-choice').value='cm'"
+                        style="padding: 14px 24px; border-radius: 12px; border: 2px solid ${
+                            opcionActual === 'cm' ? '#3b82f6' : 'rgba(255,255,255,0.15)'
+                        }; background: ${
+                            opcionActual === 'cm' ? 'rgba(59,130,246,0.2)' : 'transparent'
+                        }; color: white; font-size: 20px; font-weight: 800; cursor: pointer; font-family: Outfit; transition: all 0.2s;"
+                        onmouseover="this.style.borderColor='#3b82f6'" onmouseout="if(document.getElementById('unit-choice').value!=='cm')this.style.borderColor='rgba(255,255,255,0.15)'">
+                        cm
+                    </button>
+                    <button id="opt-m" onclick="document.getElementById('unit-choice').value='m'"
+                        style="padding: 14px 24px; border-radius: 12px; border: 2px solid ${
+                            opcionActual === 'm' ? '#3b82f6' : 'rgba(255,255,255,0.15)'
+                        }; background: ${
+                            opcionActual === 'm' ? 'rgba(59,130,246,0.2)' : 'transparent'
+                        }; color: white; font-size: 20px; font-weight: 800; cursor: pointer; font-family: Outfit; transition: all 0.2s;"
+                        onmouseover="this.style.borderColor='#3b82f6'" onmouseout="if(document.getElementById('unit-choice').value!=='m')this.style.borderColor='rgba(255,255,255,0.15)'">
+                        m
+                    </button>
+                </div>
+                <input type="hidden" id="unit-choice" value="${opcionActual}">
+            `,
+            background: document.body.classList.contains('light-mode') ? '#fff' : '#1e293b',
+            color: document.body.classList.contains('light-mode') ? '#000' : '#fff',
+            showCancelButton: true,
+            confirmButtonText: 'Aplicar',
+            cancelButtonText: 'Cancelar',
+            preConfirm: () => document.getElementById('unit-choice').value
+        });
+
+        if (unitElegida && unitElegida !== currentUnit) {
+            currentUnit = unitElegida;
+            localStorage.setItem('unit', currentUnit);
+            aplicarUnidades();       // Actualiza labels y escala del tanque
+            updateDashboardData();   // Recarga el gráfico con la nueva unidad
+            showToast(`Unidades cambiadas a ${currentUnit}`, 'success');
+        }
+    });
 
     // --- ARRANQUE ---
     checkAuth();

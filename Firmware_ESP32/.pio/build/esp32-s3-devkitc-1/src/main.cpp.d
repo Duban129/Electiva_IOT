@@ -202,4 +202,5 @@
  .pio/libdeps/esp32-s3-devkitc-1/PubSubClient/src/PubSubClient.h \
  .pio/libdeps/esp32-s3-devkitc-1/ArduinoJson/src/ArduinoJson.h \
  .pio/libdeps/esp32-s3-devkitc-1/ArduinoJson/src/ArduinoJson.hpp \
- .pio/libdeps/esp32-s3-devkitc-1/ArduinoJson/src/ArduinoJson/Configuration.hpp
+ .pio/libdeps/esp32-s3-devkitc-1/ArduinoJson/src/ArduinoJson/Configuration.hpp \
+ /home/duban/.platformio/packages/framework-arduinoespressif32/libraries/Preferences/src/Preferences.h

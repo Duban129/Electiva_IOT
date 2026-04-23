@@ -292,3 +292,79 @@ body.light-mode .events-table tbody tr:hover { background: rgba(0,0,0,0.02); }
 .badge-sev.DANGER { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
 .badge-sev.SUCCESS { background: rgba(16, 185, 129, 0.2); color: var(--success); }
 
+/* BOTON FLOTANTE DE SOPORTE */
+.floating-support-btn {
+    position: fixed;
+    bottom: 25px;
+    left: 25px;
+    background-color: var(--primary);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 50px;
+    text-decoration: none;
+    font-weight: 800;
+    box-shadow: 0 5px 20px rgba(59, 130, 246, 0.5);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.3s;
+}
+
+.floating-support-btn i {
+    font-size: 20px;
+}
+
+.floating-support-btn:hover {
+    transform: translateY(-5px) scale(1.05);
+    background-color: var(--primary-hover);
+    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.7);
+}
+
+body.light-mode .floating-support-btn {
+    color: white; /* Siempre blanco dentro del botón primary */
+}
+
+/* SELECTOR DE UNIDADES */
+.unit-selector {
+    display: inline-flex;
+    gap: 0;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 15px;
+}
+
+.unit-btn {
+    padding: 6px 16px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: all 0.25s;
+    font-family: 'Outfit', sans-serif;
+}
+
+.unit-btn:hover {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--primary);
+}
+
+.unit-btn.active {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+}
+
+body.light-mode .unit-selector {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+body.light-mode .unit-btn {
+    color: var(--text-muted);
+}
