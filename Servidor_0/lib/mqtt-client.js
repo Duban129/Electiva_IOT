@@ -1,5 +1,5 @@
 const mqtt = require('mqtt');
-const Dispositivo = require('../models/dispositivo');
+const { Dispositivo, Dato } = require('../models');
 
 class MqttClient {
 
@@ -82,17 +82,14 @@ class MqttClient {
                 );
 
                 if (dispositivoActualizado) {
-                    // Guardar en el historial (Registro)
-                    const Registro = require('../models/registro');
-                    const nuevoRegistro = new Registro({
-                        dispositivo: dispositivoActualizado._id,
-                        topic: topic,
-                        valor: valorAGuardar
+                    // Guardar en el historial (Dato)
+                    const nuevoDato = new Dato({
+                        dispositivo_uuid: dispositivoActualizado.uuid,
+                        valor: (typeof valorAGuardar === 'object') ? (valorAGuardar.valor || 0) : Number(valorAGuardar)
                     });
-                    await nuevoRegistro.save();
+                    await nuevoDato.save();
 
-                    // Aprovechamos y arreglamos el log para que no salga [object Object]
-                    console.log(`Dispositivo [${dispositivoActualizado.nombre}] actualizado. Se agregó un nuevo Registro.`);
+                    console.log(`Dispositivo [${dispositivoActualizado.nombre}] actualizado. Se agregó un nuevo Dato.`);
                 } 
             } catch(dbError) {
                 console.error('Error al actualizar en BD:', dbError);

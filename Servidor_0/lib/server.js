@@ -38,6 +38,7 @@ class Server {
         this.dispositivosPath = '/api/dispositivos';
         this.authPath = '/api/auth';
         this.registrosPath = '/api/registros';
+        this.datosPath = '/api/datos';
         this.controlPath = '/api/control';
         this.eventosPath = '/api/eventos';
 
@@ -96,7 +97,8 @@ class Server {
     routes() {
         this.app.use( this.authPath, require('../routes/auth'));
         this.app.use( this.dispositivosPath, require('../routes/dispositivos'));
-        this.app.use( this.registrosPath, require('../routes/registros'));
+        this.app.use( this.registrosPath, require('../routes/datos'));
+        this.app.use( this.datosPath, require('../routes/datos'));
         this.app.use( this.controlPath, require('../routes/control'));
         this.app.use( this.eventosPath, require('../routes/eventos'));
     }

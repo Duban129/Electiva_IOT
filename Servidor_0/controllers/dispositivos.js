@@ -1,92 +1,116 @@
 const { response, request } = require('express');
-const Dispositivo = require('../models/dispositivo');
+const { Dispositivo } = require('../models');
 
 /**
- * Maneja las peticiones GET para obtener dispositivos.
+ * Obtiene todos los dispositivos de la base de datos.
  */
 const dispositivosGet = async (req = request, res = response) => {
-    const { limite = 5, desde = 0 } = req.query;
-    const query = { estado: true };
+    try {
+        const { limite = 10, desde = 0 } = req.query;
+        
+        // Ejecutamos ambas promesas en paralelo para mayor eficiencia
+        const [ total, dispositivos ] = await Promise.all([
+            Dispositivo.countDocuments(),
+            Dispositivo.find()
+                .skip(Number(desde))
+                .limit(Number(limite))
+        ]);
 
-    const [ total, dispositivos ] = await Promise.all([
-        Dispositivo.countDocuments(query),
-        Dispositivo.find(query)
-            .skip( Number( desde ) )
-            .limit( Number( limite ) )
-    ]);
-
-    res.json({
-        total,
-        dispositivos
-    });
+        res.json({
+            total,
+            dispositivos
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            msg: 'Error al obtener los dispositivos'
+        });
+    }
 }
 
 /**
- * Maneja las peticiones POST para registrar un nuevo dispositivo.
+ * Crea un nuevo dispositivo.
  */
 const dispositivosPost = async (req, res = response) => {
-    const { nombre, ubicacion, topic, valor } = req.body;
-    const dispositivo = new Dispositivo({ nombre, ubicacion, topic, valor });
+    try {
+        const { nombre, serie } = req.body;
+        const dispositivo = new Dispositivo({ nombre, serie });
 
-    // Guardar en BD
-    await dispositivo.save();
+        // Guardar en DB
+        await dispositivo.save();
 
-    res.json({
-        dispositivo
-    });
+        res.status(201).json({
+            dispositivo
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({
+            msg: 'Error al crear el dispositivo. Verifique que el UUID sea único.',
+            error: error.message
+        });
+    }
 }
 
 /**
- * Maneja las peticiones PUT para actualizar un dispositivo por su ID.
+ * Actualiza un dispositivo por su ID.
  */
 const dispositivosPut = async (req, res = response) => {
-    const { id } = req.params;
-    const { _id, estado, ...resto } = req.body;
-
-    // TODO validar contra base de datos
-    const dispositivo = await Dispositivo.findByIdAndUpdate( id, resto, { new: true } );
-
-    res.json({
-        dispositivo
-    });
-}
-
-/**
- * Maneja las peticiones PATCH para actualizaciones parciales de dispositivos.
- */
-const dispositivosPatch = async (req, res = response) => {
-    const { id } = req.query; // Puede venir por query o params, lo normal es params pero el router para patch está '/'
-    const { _id, ...resto } = req.body;
-
-    if (!id) {
-        return res.status(400).json({ msg: 'Falta id en query' });
-    }
-
     try {
+        const { id } = req.params;
+        const { _id, uuid, ...resto } = req.body;
+
+        // No permitimos cambiar el UUID en el PUT por seguridad/consistencia, 
+        // pero actualizamos el resto de campos.
         const dispositivo = await Dispositivo.findByIdAndUpdate(id, resto, { new: true });
+
+        if (!dispositivo) {
+            return res.status(404).json({ msg: 'Dispositivo no encontrado' });
+        }
+
         res.json({
             dispositivo
         });
     } catch (error) {
-        res.status(500).json({ msg: 'Error al actualizar', error });
+        console.error(error);
+        res.status(400).json({
+            msg: 'Error al actualizar el dispositivo'
+        });
     }
 }
 
 /**
- * Maneja las peticiones DELETE para eliminar un dispositivo (borrado lógico).
+ * Actualización parcial (PATCH).
+ */
+const dispositivosPatch = (req, res = response) => {
+    res.json({
+        msg: 'patch API - dispositivosPatch'
+    });
+}
+
+/**
+ * Elimina un dispositivo.
  */
 const dispositivosDelete = async (req, res = response) => {
-    const { id } = req.params;
+    try {
+        const { id } = req.params;
+        
+        // Eliminación física
+        const dispositivo = await Dispositivo.findByIdAndDelete(id);
 
-    if (!id) {
-        return res.status(400).json({ msg: 'Falta id en params' });
+        if (!dispositivo) {
+            return res.status(404).json({ msg: 'Dispositivo no encontrado' });
+        }
+
+        res.json({
+            msg: 'Dispositivo eliminado',
+            dispositivo
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({
+            msg: 'Error al eliminar el dispositivo'
+        });
     }
-
-    const dispositivo = await Dispositivo.findByIdAndUpdate( id, { estado: false }, { new: true } );
-
-    res.json({
-        dispositivo
-    });
 }
 
 module.exports = {
